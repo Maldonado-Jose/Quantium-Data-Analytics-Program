@@ -1,0 +1,171 @@
+---
+title: 'Data Preperation and customer analytics: Task 1'
+author: "Jose A. Maldonado"
+date: "March 6, 2021"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+### Libraries needed
+library(fpp2)
+library(data.table)
+library(readr)
+library(ggmosaic)
+```
+
+### Transferring data to R
+```{r}
+filepath = "C:/Users/Running Turtle/Desktop/Virtual Internships/Quantium/"
+transdata = fread(paste0(filepath, "QVI_transaction_data.csv"))
+customdata = fread(paste0(filepath, "QVI_purchase_behaviour.csv"))
+customdata #Checking to see the data matches the excel file.
+transdata #Checking to see the data matches the excel file.
+transdata$DATE = as.Date(transdata$DATE, origin = "1899-12-30") #Changing the format of the dates, excel dates start on 1899
+```
+
+### Exploring and validating the transactional data
+```{r}
+str(transdata) #Seeing the structure of data set
+head(transdata)
+summary(transdata) #Summary of trans data gives us a better understanding of how the product quantity and the number of sales are correlated.
+
+transdata[, .N, PROD_NAME] #Examining product name
+prodnameverify = data.table(unlist(strsplit(unique(transdata[,
+  PROD_NAME]), " "))) #removed incorrect entries
+setnames(prodnameverify, 'words') #changed column name 
+prodnameverify #Verify that incorrect entries were removed
+prodnameverify = prodnameverify[grepl("\\d", words) == FALSE, ] #Removing digits
+prodnameverify = prodnameverify[grepl("[:alpha:]", words), ] #Removing special characters
+verify1 = prodnameverify[, .N, words][order(N, decreasing = TRUE)] #Sorting based on frequency from highest to lowest
+transdata[, SALSA := grepl("salsa", tolower(PROD_NAME))]
+transdata = transdata[SALSA == FALSE, ][, SALSA := NULL] #Removing salsa as we only care about chips
+
+summary(transdata) #Mainly using this to compare the quantity vs the total sales, we see that there might be potential outliers
+boxplot(transdata$PROD_QTY)
+boxplot(transdata$TOT_SALES) #Box plot lets us see potential outliers, we instantly see there are some in both the product quantity and total sales
+sum(is.na(transdata))#There are no nulls in the columns.
+transdata[PROD_QTY == 200, ] #Inspecting the 200 outlier, we see that happened in the same store almost a year apart.
+transdata[LYLTY_CARD_NBR == 226000, ] #Inspecting the card member to see his transactions, looks like his purchase might be more commercial then personal so removing it is best.
+transdata = transdata[LYLTY_CARD_NBR != 226000,] #Removed customer
+summary(transdata) #Checking the updated summary
+boxplot(transdata$PROD_QTY)
+boxplot(transdata$TOT_SALES) #Checking the updated boxplots, even though there seems to be a few outliers left this is due to the graph being zoomed in when compare to before we wouldn't consider them outliers.
+
+transdata[, .N, by = DATE] #364 rows means there are only 364 days worth of data, we are missing one day
+summary(transdata[, .N, by = DATE]) #summary of the number of transactions per day shows us there might be no outliers, but it is still best if we check to see which day is missing.
+
+dates = data.table(seq(as.Date("2018/07/01"), as.Date("2019/06/30"), by = "day")) #Creating a sequence of dates to see which day is missing from transaction data.
+setnames(dates, "DATE") #Changed column name to match the trans data.
+dates #Checking to make sure it looks correct
+datestrans = merge(dates, transdata[, .N, by = DATE], all.x = TRUE) #Merged the original dates with the created dates
+datestrans #We see that 12/25/2018 is the missing day which no purchases were made. Makes sense since it was Christmas.
+
+theme_set(theme_bw())
+theme_update(plot.title = element_text(hjust = 0.5)) #Setting plot themes to format graphs
+ggplot(datestrans, aes(x = DATE, y = N)) +
+  geom_line() +
+  labs(x = "Day", y = "Number of transactions", title = "Transactions over time") + scale_x_date(breaks = "1 month") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) #Visual representation of purchases with an increase in December and a break in there.
+december = datestrans[month(DATE) == 12] #Isolated December
+ggplot(december, aes(x = DATE, y = N)) +
+  geom_line() +
+  labs(x = "Day", y = "Number of transactions", title = "Transactions over December") + scale_x_date(breaks = "1 day") +
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5)) #Zoomed in version of the graph above
+
+transdata[, PACK_SIZE := parse_number(PROD_NAME)] #Creating Pack Size
+transdata[, .N, PACK_SIZE][order(PACK_SIZE)] #Checking output
+hist(transdata[, PACK_SIZE]) #Histogram of the pack size
+summary(transdata[, PACK_SIZE]) #Summary of pack size gives us a better overview of the histogram as we can see min and max based on pack size
+
+transdata[, BRAND := toupper(substr(PROD_NAME, 1, regexpr(pattern = ' ', PROD_NAME) - 1))] #Creating a column with the brands
+transdata[, .N, by = BRAND][order(-N)] #Checking the column to see if it looks reasonable while ordering it from highest to lowest based on "N"
+
+transdata[BRAND == "RED", BRAND := "RRD"]
+transdata[BRAND == "DORITO", BRAND := "DORITOS"]
+transdata[BRAND == "GRAIN", BRAND := "GRNWVES"]
+transdata[BRAND == "SNBTS", BRAND := "SUNBITES"]
+transdata[BRAND == "INFZNS", BRAND := "INFUZIONS"]
+transdata[BRAND == "SMITH", BRAND := "SMITHS"]
+transdata[BRAND == "WW", BRAND := "WOOLWORTHS"]
+transdata[BRAND == "NCC", BRAND := "NATURAL"] #Cleaning brand names
+transdata[, .N, by = BRAND][order(BRAND)] #Checking to see if it looks reasonable
+```
+
+### Exploring and validating the customer data
+```{r}
+str(customdata) #Seeing the structure of the data
+summary(customdata) #Summary of the data doesn't tell us much since lifestage, premium customer are characters and loyalty card number corresponds to a certain customer.
+sum(is.na(customdata)) #There are no nulls
+customdata[, .N, by = LIFESTAGE][order(-N)] #Checking to see if it looks reasonable 
+summary(customdata[, .N, by = LIFESTAGE])#Summary gives us a better understanding to see if there are any potential outliers
+customdata[, .N, by = PREMIUM_CUSTOMER][order(-N)] #Checking to see if it looks reasonable
+summary(customdata[, .N, by = PREMIUM_CUSTOMER]) #Checking for potential outliers
+
+mdata = merge(transdata, customdata, all.x = TRUE) #Merging data
+sum(is.na(mdata)) #Checking to see if there are any dulls in the merged data set
+sum(is.na(mdata$LIFESTAGE)) #Checking to see if there are any dulls in Lifestage
+sum(is.na(mdata$PREMIUM_CUSTOMER)) #Checking to see if there are any dulls in Premium Customers
+
+fwrite(mdata, paste0(filepath, "QVI_mData.csv"))
+```
+
+### Data analysis and customer segments
+```{r}
+tsales = mdata[, .(SALES = sum(TOT_SALES)), . (LIFESTAGE, PREMIUM_CUSTOMER)] #Total sales by lifestage and premium customer
+summary(tsales) #Summary of total sales, from the looks of it we can say there aren't any outliers which makes since since we validated the data earlier
+
+salesplot = ggplot(data = tsales) + geom_mosaic(aes(weight = SALES, x = product(PREMIUM_CUSTOMER, LIFESTAGE), fill = PREMIUM_CUSTOMER)) + labs(x = "Lifestage", y = "Premium Customer", title = "Proportion of Sales") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+salesplot + geom_text(data = ggplot_build(salesplot)$data[[1]], aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = as.character(paste(round(.wt/sum(.wt),3)*100, '%'))))
+
+numcust = mdata[, .(CUSTOMERS = uniqueN(LYLTY_CARD_NBR)), .(LIFESTAGE, PREMIUM_CUSTOMER)][order(-CUSTOMERS)] #Number of customers based on Lifestage and Premium Customer
+customerplot = ggplot(data = numcust) + geom_mosaic(aes(weight = CUSTOMERS, x = product(PREMIUM_CUSTOMER, LIFESTAGE), fill = PREMIUM_CUSTOMER)) + labs(x = "Lifestage", y = "Premium customer flag", title = "Proportion of customers") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+customerplot + geom_text(data = ggplot_build(customerplot)$data[[1]], aes(x = (xmin + xmax)/2, y = (ymin + ymax)/2, label = as.character(paste(round(.wt/sum(.wt),3)*100, '%'))))
+
+avgunites = mdata[, .(AVG = sum(PROD_QTY)/uniqueN(LYLTY_CARD_NBR)), .(LIFESTAGE, PREMIUM_CUSTOMER)][order(-AVG)] #Average unites based on customer
+ggplot(avgunites, aes(weight = AVG, x = LIFESTAGE, fill = PREMIUM_CUSTOMER)) + geom_bar(position = position_dodge()) +
+  labs(x = "Lifestage", y = "Avg units per transaction", title = "Units per customer") + theme(axis.text.x = element_text(angle = 90, vjust = 0.5))
+
+priceavg = mdata[, .(AVG = sum(TOT_SALES)/sum(PROD_QTY)), .(LIFESTAGE, PREMIUM_CUSTOMER)][order(-AVG)] #Average price based on units
+ggplot(priceavg, aes(weight = AVG, x = LIFESTAGE, fill = PREMIUM_CUSTOMER)) + geom_bar(position = position_dodge()) +
+  labs(x = "Lifestage", y = "Avg price per unit", title = "Price per unit") + theme(axis.title.x = element_text(angle = 90, vjust = 0.5))
+
+unitprice = mdata[, price := TOT_SALES/PROD_QTY] #
+t.test(mdata[LIFESTAGE %in% c("YOUNG SINGLES/COUPLES", "MIDAGE SINGLES/COUPLES ") & PREMIUM_CUSTOMER == "Mainstream", price], mdata[LIFESTAGE %in% c("YOUNG SINGLE/COUPLES", "MIDAGE SINGLES/COUPLES") & PREMIUM_CUSTOMER != "Mainstream", price], alternative = "greater") #The t-test results in a p-value of 2.2e-16 the unit price for mainstream, young and mid-age singles and couples are significantly higher than that of budget or premium, young and midage singles and couples.
+
+c.segment1 = mdata[LIFESTAGE == "YOUNG SINGLES/COUPLES" & PREMIUM_CUSTOMER == "Mainstream",]
+c.segment2 = mdata[! (LIFESTAGE == "YOUNG SINGLES/COUPLES" & PREMIUM_CUSTOMER == "Mainstream"),]
+q.segment1 = c.segment1[, sum(PROD_QTY)]
+q.segment2 = c.segment2[, sum(PROD_QTY)]
+q.s.brand1 = c.segment1[, .(targetSegment = sum(PROD_QTY)/q.segment1), by = BRAND]
+q.s.brand2 = c.segment2[, .(other = sum(PROD_QTY)/q.segment2), by = BRAND]
+b.prop = merge(q.s.brand1, q.s.brand2)[, affinityToBrand := targetSegment/other]
+b.prop[order(-affinityToBrand)]
+q.s.pack1 = c.segment1[, .(targetSegment = sum(PROD_QTY)/q.segment1), by = PACK_SIZE]
+q.s.pack2 = c.segment2[, .(other = sum(PROD_QTY)/q.segment2), by = PACK_SIZE]
+p.proportions = merge(q.s.pack1, q.s.pack2)[, affinityToPack := targetSegment/other]
+p.proportions[order(-affinityToPack)]
+mdata[PACK_SIZE ==270, unique(PROD_NAME)] #Mainstream youg singles/couples are 27% more likely to purchase a 270g pack of chips when compared to the rest of the population. It also seems like Twisties is the only brand that offers the 270g packs and so this results in a higher likelyhood of mainstream young singles/couples purchasing twisties.
+
+#From these results we see that:
+#Mainstream young singles/couples are 26.8% more likely to purchase Tyrrells Chips compared to the rest of the population.
+#Mainstream young singles/couples are 56% more likely to buy Burger Rings compared to the rest of the populations.
+#Sales have mainly been due to budget on older families, mainstream young/couples, and mainstream retirees shoppers.
+#The high spending on chips for mainstream young singles/couples and retirees is due to more of them than other buyers.
+#Mainstream, mid-age, and young singles/couples are also more likely to pay more per pack of chips.
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
