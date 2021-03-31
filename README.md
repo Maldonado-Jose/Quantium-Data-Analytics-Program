@@ -10,8 +10,8 @@ Analyze client's transaction dataset and identify customer purchasing behaviors 
 
 Stage 2: Experimentation and uplift testing
 
-Extend your analysis from Task 1 to help you identify benchmark stores that allow you to test the trial store layouts' impact on customer sales.
+Extend your analysis from Stage 1 to help you identify benchmark stores that allow you to test the trial store layouts' impact on customer sales.
 
 Stage 3: Analytics and commercial application
 
-Use analytics and insights from Task 1 and 2 to prepare a report for your client, the Category Manager.
+Use analytics and insights from Stage 1 and 2 to prepare a report for your client, the Category Manager.
